@@ -22,40 +22,67 @@ func DefaultOptions() (*Options, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
-	return &Options{DatabaseURL: cfg.Database.DSN(), MigrationsDir: defaultMigrationsDir}, nil
+
+	return &Options{
+		DatabaseURL:   cfg.Database.DSN(),
+		MigrationsDir: defaultMigrationsDir,
+	}, nil
 }
 
 func Up(options *Options) error {
-	return withDB(options, func(db *sql.DB, dir string) error { return goose.Up(db, dir) })
-}
-func Down(options *Options) error {
-	return withDB(options, func(db *sql.DB, dir string) error { return goose.Down(db, dir) })
-}
-func Status(options *Options) error {
-	return withDB(options, func(db *sql.DB, dir string) error { return goose.Status(db, dir) })
+	return run(options, func(db *sql.DB, dir string) error {
+		return goose.Up(db, dir)
+	})
 }
 
-func withDB(options *Options, operation func(*sql.DB, string) error) error {
+func Down(options *Options) error {
+	return run(options, func(db *sql.DB, dir string) error {
+		return goose.Down(db, dir)
+	})
+}
+
+func Status(options *Options) error {
+	return run(options, func(db *sql.DB, dir string) error {
+		return goose.Status(db, dir)
+	})
+}
+
+func run(
+	options *Options,
+	fn func(db *sql.DB, dir string) error,
+) error {
+
 	if options == nil {
 		var err error
+
 		options, err = DefaultOptions()
 		if err != nil {
 			return err
 		}
 	}
+
 	if options.MigrationsDir == "" {
 		options.MigrationsDir = defaultMigrationsDir
 	}
+
 	if err := goose.SetDialect("postgres"); err != nil {
 		return fmt.Errorf("set goose dialect: %w", err)
 	}
+
 	db, err := sql.Open("pgx", options.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
-	defer db.Close()
+
+	defer func() {
+		if err := db.Close(); err != nil {
+			fmt.Printf("close database: %v\n", err)
+		}
+	}()
+
 	if err := db.Ping(); err != nil {
 		return fmt.Errorf("ping database: %w", err)
 	}
-	return operation(db, options.MigrationsDir)
+
+	return fn(db, options.MigrationsDir)
 }
