@@ -1,0 +1,115 @@
+openapi: 3.0.3
+info:
+  title: Subscriptions API
+  version: 1.0.0
+  description: REST API для учёта и агрегации стоимости онлайн-подписок.
+servers:
+  - url: http://localhost:8099
+paths:
+  /health:
+    get:
+      summary: Проверка доступности сервиса
+      responses:
+        '200': { description: Сервис доступен }
+  /api/v1/subscriptions:
+    post:
+      summary: Создать подписку
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSubscription' }
+      responses:
+        '201': { description: Подписка создана, content: { application/json: { schema: { $ref: '#/components/schemas/Subscription' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    get:
+      summary: Получить список подписок
+      parameters:
+        - { $ref: '#/components/parameters/UserID' }
+        - { name: service_name, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, default: 50 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200': { description: Список подписок, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Subscription' } } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /api/v1/subscriptions/total:
+    get:
+      summary: Рассчитать стоимость подписок за период
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, pattern: '^[0-9]{2}-[0-9]{4}$' }, example: '01-2025' }
+        - { name: to, in: query, required: true, schema: { type: string, pattern: '^[0-9]{2}-[0-9]{4}$' }, example: '12-2025' }
+        - { $ref: '#/components/parameters/UserID' }
+        - { name: service_name, in: query, schema: { type: string } }
+      responses:
+        '200': { description: Итоговая стоимость в рублях, content: { application/json: { schema: { type: object, required: [total], properties: { total: { type: integer, example: 4800 } } } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /api/v1/subscriptions/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      summary: Получить подписку по идентификатору
+      responses:
+        '200': { description: Подписка, content: { application/json: { schema: { $ref: '#/components/schemas/Subscription' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      summary: Обновить подписку
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateSubscription' }
+      responses:
+        '200': { description: Обновлённая подписка, content: { application/json: { schema: { $ref: '#/components/schemas/Subscription' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      summary: Удалить подписку
+      responses:
+        '204': { description: Подписка удалена }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+components:
+  parameters:
+    UserID:
+      name: user_id
+      in: query
+      schema: { type: string, format: uuid }
+  responses:
+    BadRequest:
+      description: Некорректные данные запроса
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotFound:
+      description: Запись не найдена
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  schemas:
+    CreateSubscription:
+      type: object
+      required: [service_name, price, user_id, start_date]
+      properties:
+        service_name: { type: string, example: Yandex Plus }
+        price: { type: integer, minimum: 1, example: 400 }
+        user_id: { type: string, format: uuid, example: 60601fee-2bf1-4721-ae6f-7636e79a0cba }
+        start_date: { type: string, pattern: '^[0-9]{2}-[0-9]{4}$', example: '07-2025' }
+        end_date: { type: string, nullable: true, pattern: '^[0-9]{2}-[0-9]{4}$', example: '12-2025' }
+    UpdateSubscription:
+      type: object
+      properties:
+        service_name: { type: string, example: Yandex Plus }
+        price: { type: integer, minimum: 1, example: 400 }
+        user_id: { type: string, format: uuid, example: 60601fee-2bf1-4721-ae6f-7636e79a0cba }
+        start_date: { type: string, pattern: '^[0-9]{2}-[0-9]{4}$', example: '07-2025' }
+        end_date: { type: string, nullable: true, pattern: '^[0-9]{2}-[0-9]{4}$', example: '12-2025' }
+    Subscription:
+      allOf:
+        - { $ref: '#/components/schemas/CreateSubscription' }
+        - type: object
+          required: [id, created_at, updated_at]
+          properties:
+            id: { type: string, format: uuid }
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }
+    Error:
+      type: object
+      required: [error]
+      properties: { error: { type: string } }
