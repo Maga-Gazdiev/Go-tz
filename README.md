@@ -145,4 +145,3 @@ cp .env.example .env
 make migrate
 make run
 ```
-# Go-tz
